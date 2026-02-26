@@ -12,6 +12,11 @@ from pathlib import Path
 
 CONFIG_FILE = "config.json"
 
+def clear_screen():
+    print("\033[H\033[2J", end="")
+    sys.stdout.flush()
+
+
 def print_header():
     print("\n" + "="*50)
     print("  🍪 Roblox Auto-Rejoin Tool")
@@ -131,15 +136,29 @@ def get_user_info(cookie):
     return None, None
 
 def clean_input(prompt):
+    try:
+        subprocess.run(['stty', 'sane'], stderr=subprocess.DEVNULL)
+    except: pass
+    print("\033[?25h", end="")
+    sys.stdout.flush()
+    
     print(prompt, end='')
     sys.stdout.flush()
     try:
-        return input().strip()
+        raw_val = input().strip()
     except EOFError:
         return ""
+        
+    chars = []
+    for c in raw_val:
+        if c == '\x7f' or c == '\x08':
+            if chars: chars.pop()
+        else:
+            chars.append(c)
+    return "".join(chars)
 
 def create_config():
-    os.system('clear')
+    clear_screen()
     print_header()
     if not check_root():
         print("❌ Root access required!")
@@ -235,7 +254,7 @@ def create_config():
 def edit_config():
     if not os.path.exists(CONFIG_FILE):
         print("No config file found! Please run 'Create Config' first.")
-        time.sleep(2)
+        input("\nPress Enter to return...")
         return
         
     print("Opening config.json in nano...")
@@ -399,12 +418,12 @@ def send_webhook(webhook_url, accounts):
 def start_rejoin_app():
     if not os.path.exists(CONFIG_FILE):
         print("Config file not found! Please run 'Create Config' first.")
-        time.sleep(2)
+        input("\nPress Enter to return...")
         return
         
     if not check_root():
         print("Root access required to manage packages and take screenshots!")
-        time.sleep(2)
+        input("\nPress Enter to return...")
         return
         
     with open(CONFIG_FILE, 'r') as f:
@@ -416,7 +435,7 @@ def start_rejoin_app():
         time.sleep(2)
         return
         
-    os.system('clear')
+    clear_screen()
     os.system('termux-wake-lock')
     run_root_cmd("setenforce 0")
     
@@ -530,7 +549,7 @@ def start_rejoin_app():
 
 def main():
     while True:
-        os.system('clear')
+        clear_screen()
         print_header()
         print("  1. Create Config")
         print("  2. Start Rejoin App")
@@ -543,7 +562,7 @@ def main():
         elif c == '2': start_rejoin_app()
         elif c == '3': edit_config()
         elif c == '4':
-            os.system('clear')
+            clear_screen()
             break
 
 if __name__ == "__main__":
