@@ -32,7 +32,8 @@ def check_root():
 def run_root_cmd(cmd):
     try:
         result = subprocess.run(['su', '-c', cmd], capture_output=True, text=True, timeout=10)
-        return result.returncode == 0, result.stdout.strip()
+        out = (result.stdout or '') + '\n' + (result.stderr or '')
+        return result.returncode == 0, out.strip()
     except Exception as e:
         return False, str(e)
 
@@ -363,12 +364,28 @@ def check_user_presence(uid, cookie):
     return True, None
 
 def open_ps_link(link, pkg, bounds=None):
-    flags = f"--windowingMode 5 --bounds {bounds}" if bounds else ""
-    cmd1 = f'am start {flags} -n {pkg}/com.roblox.client.ActivityProtocolLaunch -a android.intent.action.VIEW -d "{link}"'
-    ok, out = run_root_cmd(cmd1)
-    if ok and "Error:" not in out and "does not exist" not in out: return True
-    ok, out = run_root_cmd(f'am start {flags} -a android.intent.action.VIEW -d "{link}" -p {pkg}')
-    return ok and "Error:" not in out and "does not exist" not in out
+    def try_launch(extras=""):
+        c1 = f'am start {extras} -n {pkg}/com.roblox.client.ActivityProtocolLaunch -a android.intent.action.VIEW -d "{link}"'
+        ok1, o1 = run_root_cmd(c1)
+        if ok1 and "Error:" not in o1 and "does not exist" not in o1: return True
+        
+        c2 = f'am start {extras} -a android.intent.action.VIEW -d "{link}" -p {pkg}'
+        ok2, o2 = run_root_cmd(c2)
+        if ok2 and "Error:" not in o2 and "does not exist" not in o2: return True
+        
+        return False
+
+    if bounds:
+        flags = f"--windowingMode 5 --bounds {bounds}"
+        if try_launch(flags):
+            return True
+            
+    # Fallback to the original exact working script command from your old Python file
+    # This fires if windowingMode/bounds crashes on your device or if bounds isn't provided
+    if try_launch(""):
+        return True
+        
+    return False
 
 def log_activity(msg, lvl="INFO"):
     try:
@@ -436,7 +453,6 @@ def start_rejoin_app():
         return
         
     clear_screen()
-    os.system('termux-wake-lock')
     run_root_cmd("setenforce 0")
     
     interval = config.get("check_interval", 30)
@@ -518,6 +534,12 @@ def start_rejoin_app():
                         
                 if needs_rejoin:
                     log_activity(f"{a['name']}: {reason}", "WARN")
+                    a['status'] = f"Crash: {reason}"
+                    
+                    if wh_url:
+                        draw_ui(accounts, "Webhook", "Sending Crash Status...")
+                        send_webhook(wh_url, accounts)
+                        
                     a['status'] = "Restarting..."
                     draw_ui(accounts, "Monitoring", f"Fix {a['name']}", nxt_wh)
                     
@@ -544,7 +566,6 @@ def start_rejoin_app():
     except KeyboardInterrupt:
         pass
     finally:
-        os.system('termux-wake-unlock')
         sys.stdout.write("\033[?25h")
 
 def main():
